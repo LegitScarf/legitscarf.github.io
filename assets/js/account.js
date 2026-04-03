@@ -177,4 +177,6 @@ signOutButton?.addEventListener("click", async () => {
     window.location.href = "login.html";
 });
 
-void init();
+void init().catch((error) => {
+    setMessage(accountMessage, "error", error.message);
+});

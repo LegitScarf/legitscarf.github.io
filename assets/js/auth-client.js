@@ -1,81 +1,42 @@
-import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-
 const rawConfig = window.NEXALPHA_CONFIG ?? {};
 
 function normalizeString(value) {
     return typeof value === "string" ? value.trim() : "";
 }
 
-function isPlaceholder(value, placeholder) {
-    return value.includes(placeholder);
+function trimTrailingSlash(value) {
+    return value.replace(/\/+$/, "");
 }
 
-function deriveFunctionsBaseUrl(supabaseUrl, explicitBaseUrl) {
-    const normalizedBaseUrl = normalizeString(explicitBaseUrl);
-    if (normalizedBaseUrl && !isPlaceholder(normalizedBaseUrl, "YOUR_PROJECT_ID")) {
-        return normalizedBaseUrl.replace(/\/+$/, "");
+function deriveBaseUrl(explicitValue, fallbackValue) {
+    const normalizedExplicit = normalizeString(explicitValue);
+    if (normalizedExplicit) {
+        return trimTrailingSlash(normalizedExplicit);
     }
 
-    if (!supabaseUrl) {
-        return "";
-    }
-
-    return `${supabaseUrl.replace(/\/+$/, "")}/functions/v1`;
+    const normalizedFallback = normalizeString(fallbackValue);
+    return normalizedFallback ? trimTrailingSlash(normalizedFallback) : "";
 }
+
+const browserOrigin = window.location.origin && window.location.origin !== "null" ? window.location.origin : "";
+const appBaseUrl = deriveBaseUrl(rawConfig.appBaseUrl, browserOrigin);
 
 const config = Object.freeze({
     ...rawConfig,
-    supabaseUrl: normalizeString(rawConfig.supabaseUrl),
-    supabaseAnonKey: normalizeString(rawConfig.supabaseAnonKey),
-    functionsBaseUrl: deriveFunctionsBaseUrl(
-        normalizeString(rawConfig.supabaseUrl),
-        rawConfig.functionsBaseUrl
-    )
+    appBaseUrl,
+    apiBaseUrl: deriveBaseUrl(rawConfig.apiBaseUrl, appBaseUrl ? `${appBaseUrl}/api` : "")
 });
-
-function hasRealConfig() {
-    return Boolean(
-        config.supabaseUrl &&
-        config.supabaseAnonKey &&
-        !isPlaceholder(config.supabaseUrl, "YOUR_PROJECT_ID") &&
-        !isPlaceholder(config.supabaseAnonKey, "YOUR_SUPABASE_ANON_KEY")
-    );
-}
 
 export function getConfig() {
     return config;
 }
 
 export function isConfigured() {
-    return hasRealConfig();
+    return Boolean(config.apiBaseUrl);
 }
 
-export function getFunctionsBaseUrl() {
-    if (!hasRealConfig()) {
-        return "";
-    }
-
-    return config.functionsBaseUrl;
-}
-
-let supabaseClient = null;
-
-export function getSupabase() {
-    if (!hasRealConfig()) {
-        return null;
-    }
-
-    if (!supabaseClient) {
-        supabaseClient = createClient(config.supabaseUrl, config.supabaseAnonKey, {
-            auth: {
-                persistSession: true,
-                autoRefreshToken: true,
-                detectSessionInUrl: true
-            }
-        });
-    }
-
-    return supabaseClient;
+export function getApiBaseUrl() {
+    return config.apiBaseUrl;
 }
 
 export function getQueryParam(name) {
@@ -109,87 +70,68 @@ export function requireConfigured(messageNode) {
     setMessage(
         messageNode,
         "warning",
-        "Supabase is not configured yet. Update assets/js/config.js with your real supabaseUrl and supabaseAnonKey before using auth."
+        "FastAPI is not configured yet. Update assets/js/config.js with apiBaseUrl if your frontend and backend run on different origins."
     );
     return false;
 }
 
+export async function apiRequest(path, options = {}) {
+    const { method = "GET", body, headers = {} } = options;
+
+    if (!isConfigured()) {
+        throw new Error("FastAPI is not configured.");
+    }
+
+    const response = await fetch(`${getApiBaseUrl()}${path}`, {
+        method,
+        credentials: "include",
+        headers: {
+            ...(body ? { "Content-Type": "application/json" } : {}),
+            ...headers
+        },
+        body: body ? JSON.stringify(body) : undefined
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(payload.detail ?? payload.error ?? "Request failed.");
+    }
+
+    return payload;
+}
+
 export async function getSession() {
-    const supabase = getSupabase();
-    if (!supabase) {
-        return null;
-    }
+    return apiRequest("/auth/session");
+}
 
-    const { data, error } = await supabase.auth.getSession();
-    if (error) {
-        throw error;
-    }
+export async function registerAccount(payload) {
+    return apiRequest("/auth/register", {
+        method: "POST",
+        body: payload
+    });
+}
 
-    return data.session;
+export async function signIn(payload) {
+    return apiRequest("/auth/login", {
+        method: "POST",
+        body: payload
+    });
 }
 
 export async function signOut() {
-    const supabase = getSupabase();
-    if (!supabase) {
-        return;
-    }
-
-    await supabase.auth.signOut();
+    return apiRequest("/auth/logout", {
+        method: "POST"
+    });
 }
 
 export async function fetchStatus() {
-    const supabase = getSupabase();
-    if (!supabase) {
-        throw new Error("Supabase is not configured.");
-    }
-
-    const session = await getSession();
-    if (!session?.access_token) {
-        return {
-            state: "guest",
-            canAccessApps: false
-        };
-    }
-
-    const response = await fetch(`${getFunctionsBaseUrl()}/me-status`, {
-        headers: {
-            Authorization: `Bearer ${session.access_token}`
-        }
-    });
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-        throw new Error(payload.error ?? "Unable to fetch account status.");
-    }
-
-    return payload;
+    return apiRequest("/account/status");
 }
 
 export async function createSubscription() {
-    const supabase = getSupabase();
-    if (!supabase) {
-        throw new Error("Supabase is not configured.");
-    }
-
-    const session = await getSession();
-    if (!session?.access_token) {
-        throw new Error("Please sign in before starting a subscription.");
-    }
-
-    const response = await fetch(`${getFunctionsBaseUrl()}/create-subscription`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`
-        }
+    return apiRequest("/billing/create-subscription", {
+        method: "POST"
     });
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-        throw new Error(payload.error ?? "Unable to create the subscription.");
-    }
-
-    return payload;
 }
 
 export function getProduct(productCode) {
@@ -206,7 +148,7 @@ export function redirectTo(path) {
 
 export async function bounceIfAuthenticated(defaultTarget = "account.html") {
     const session = await getSession();
-    if (session?.user) {
+    if (session.authenticated) {
         redirectTo(getRedirectTarget(defaultTarget));
     }
 }
@@ -217,7 +159,7 @@ export async function requireAuthPage(messageNode) {
     }
 
     const session = await getSession();
-    if (!session?.user) {
+    if (!session.authenticated) {
         const redirect = encodeURIComponent(window.location.pathname.split("/").pop() || "account.html");
         redirectTo(`login.html?redirect=${redirect}`);
         return null;

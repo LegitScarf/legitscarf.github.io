@@ -1,31 +1,14 @@
-import { fetchStatus, getFunctionsBaseUrl, getSession, requireAuthPage, setMessage } from "./auth-client.js";
+import { apiRequest, fetchStatus, requireAuthPage, setMessage } from "./auth-client.js";
 
 const message = document.querySelector("[data-admin-message]");
 const tableBody = document.querySelector("[data-admin-body]");
 const refreshButton = document.querySelector("[data-admin-refresh]");
 
-async function callFunction(path, method = "GET", body) {
-    const session = await getSession();
-    if (!session?.access_token) {
-        throw new Error("Admin session not found.");
-    }
-
-    const functionsBaseUrl = getFunctionsBaseUrl();
-    const response = await fetch(`${functionsBaseUrl}/${path}`, {
+async function callAdmin(path, method = "GET", body) {
+    return apiRequest(`/admin/${path}`, {
         method,
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`
-        },
-        body: body ? JSON.stringify(body) : undefined
+        body
     });
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-        throw new Error(payload.error ?? "Admin request failed.");
-    }
-
-    return payload;
 }
 
 function renderRow(user) {
@@ -65,7 +48,7 @@ async function handleDecision(button, payload, successTone, successMessage) {
     button.disabled = true;
 
     try {
-        await callFunction("admin-approve-user", "POST", payload);
+        await callAdmin("approve-user", "POST", payload);
         setMessage(message, successTone, successMessage);
         await loadUsers();
     } catch (error) {
@@ -77,7 +60,7 @@ async function handleDecision(button, payload, successTone, successMessage) {
 
 async function loadUsers() {
     tableBody.innerHTML = "";
-    const payload = await callFunction("admin-list-users");
+    const payload = await callAdmin("users");
     tableBody.innerHTML = payload.users.map(renderRow).join("") || `
         <tr>
             <td colspan="5" class="muted">No users found.</td>
@@ -88,7 +71,7 @@ async function loadUsers() {
         button.addEventListener("click", async () => {
             const targetUserId = button.getAttribute("data-approve");
             await handleDecision(button, {
-                targetUserId,
+                target_user_id: targetUserId,
                 decision: "approved"
             }, "success", "User approved.");
         });
@@ -98,7 +81,7 @@ async function loadUsers() {
         button.addEventListener("click", async () => {
             const targetUserId = button.getAttribute("data-reject");
             await handleDecision(button, {
-                targetUserId,
+                target_user_id: targetUserId,
                 decision: "rejected"
             }, "warning", "User rejected.");
         });

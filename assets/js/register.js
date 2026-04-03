@@ -1,7 +1,14 @@
-import { bounceIfAuthenticated, clearMessage, getSupabase, redirectTo, requireConfigured, setMessage } from "./auth-client.js";
+import { bounceIfAuthenticated, clearMessage, redirectTo, registerAccount, requireConfigured, setMessage } from "./auth-client.js";
 
 const form = document.querySelector("[data-register-form]");
 const message = document.querySelector("[data-form-message]");
+const helper = document.querySelector("[data-register-helper]");
+
+function clearHelper() {
+    if (helper) {
+        helper.innerHTML = "";
+    }
+}
 
 async function init() {
     if (!form) {
@@ -15,6 +22,7 @@ async function init() {
 form?.addEventListener("submit", async (event) => {
     event.preventDefault();
     clearMessage(message);
+    clearHelper();
 
     if (!requireConfigured(message)) {
         return;
@@ -41,41 +49,44 @@ form?.addEventListener("submit", async (event) => {
         return;
     }
 
-    const supabase = getSupabase();
     const button = form.querySelector("button[type='submit']");
     if (button) {
         button.disabled = true;
     }
 
-    const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-            emailRedirectTo: `${window.location.origin}/account.html`,
-            data: {
-                full_name: fullName
-            }
+    try {
+        const payload = await registerAccount({
+            full_name: fullName,
+            email,
+            password
+        });
+
+        if (payload.emailDelivery === "preview" && payload.verificationUrl && helper) {
+            helper.innerHTML = `<a class="portal-button-secondary" href="${payload.verificationUrl}">Verify Email Now</a>`;
         }
-    });
 
-    if (button) {
-        button.disabled = false;
-    }
+        setMessage(
+            message,
+            "success",
+            payload.emailDelivery === "preview"
+                ? `Account created for ${email}. This backend is running without SMTP, so use the verification link below before signing in.`
+                : `Account created for ${email}. Check your inbox, verify your email, then sign in to continue.`
+        );
 
-    if (error) {
+        if (payload.emailDelivery !== "preview") {
+            window.setTimeout(() => {
+                redirectTo("login.html");
+            }, 2400);
+        }
+    } catch (error) {
         setMessage(message, "error", error.message);
-        return;
+    } finally {
+        if (button) {
+            button.disabled = false;
+        }
     }
-
-    setMessage(
-        message,
-        "success",
-        `Account created for ${email}. Check your inbox, verify your email, then sign in to continue.`
-    );
-
-    window.setTimeout(() => {
-        redirectTo("login.html");
-    }, 2400);
 });
 
-void init();
+void init().catch((error) => {
+    setMessage(message, "error", error.message);
+});

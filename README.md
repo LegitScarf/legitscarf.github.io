@@ -1,63 +1,26 @@
-<div align="center">
+# NexAlpha
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:020507,50:00ff88,100:ffb800&height=200&section=header&text=NEXALPHA&fontSize=72&fontColor=ffffff&animation=fadeIn&fontAlignY=38&desc=Intelligent%20Market%20Systems%20-%20India&descAlignY=58&descSize=16" width="100%"/>
+NexAlpha is a gated-access product site for OptiTrade and BharatAlpha. The project now runs on a FastAPI backend that serves the static frontend, handles authentication, tracks approval state, and syncs billing state from Razorpay.
 
-![Status](https://img.shields.io/badge/STATUS-GATED_BETA-00ff88?style=for-the-badge&labelColor=020507&color=00ff88)
-![Products](https://img.shields.io/badge/PRODUCTS-2_ACTIVE-ffb800?style=for-the-badge&labelColor=020507&color=ffb800)
-![Auth](https://img.shields.io/badge/AUTH-SUPABASE-00d4ff?style=for-the-badge&labelColor=020507&color=00d4ff)
-![Billing](https://img.shields.io/badge/BILLING-RAZORPAY-ff3b5c?style=for-the-badge&labelColor=020507&color=ff3b5c)
+## Current Stack
 
-</div>
+- Frontend: HTML, CSS, vanilla JavaScript
+- Backend: FastAPI
+- Database: SQLAlchemy with SQLite by default
+- Auth: FastAPI cookie session + hashed passwords
+- Billing: Razorpay subscriptions
+- Product apps: Streamlit
 
----
+## User Flow
 
-## Overview
-
-NexAlpha is the product brand for a suite of multi-agent AI systems built for the Indian financial markets.
-
-This repository now contains:
-
-- the public GitHub Pages landing page
-- static login, registration, account, and access-check pages
-- Supabase schema for auth, approvals, subscriptions, and payments
-- Supabase Edge Function scaffolding for status, approvals, subscription creation, and Razorpay webhooks
-
-The intended access rule is:
-
-```text
-logged in + email verified + admin approved + subscription active = access granted
-```
-
-One `Rs 500/month` subscription unlocks both OptiTrade and BharatAlpha.
-
----
-
-## Current User Flow
-
-1. User registers publicly on `register.html`
-2. User verifies email
+1. User registers on `register.html`
+2. User verifies email with the FastAPI verification link
 3. Admin approves the account
 4. Approved user starts the Razorpay subscription
-5. Razorpay webhook marks the subscription active
-6. User can launch both apps through `access.html`
+5. Razorpay webhook updates subscription/payment state
+6. Active users launch either app through `access.html`
 
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Frontend | HTML5, CSS3, Vanilla JavaScript |
-| Hosting | GitHub Pages |
-| Auth | Supabase Auth |
-| Database | Supabase Postgres |
-| Backend | Supabase Edge Functions |
-| Billing | Razorpay Subscriptions |
-| Product Apps | Streamlit |
-
----
-
-## Repository Structure
+## Repository Layout
 
 ```text
 nexalpha/
@@ -69,54 +32,53 @@ nexalpha/
 ├── admin.html
 ├── assets/
 │   ├── css/
-│   │   └── portal.css
 │   └── js/
-│       ├── config.js
-│       ├── auth-client.js
-│       ├── login.js
-│       ├── register.js
-│       ├── account.js
-│       ├── access.js
-│       └── admin.js
-├── supabase/
-│   ├── migrations/
-│   │   └── 20260402_auth_billing.sql
-│   └── functions/
-│       ├── _shared/
-│       ├── me-status/
-│       ├── create-subscription/
-│       ├── admin-list-users/
-│       ├── admin-approve-user/
-│       └── razorpay-webhook/
-└── README.md
+├── backend/
+│   ├── .env.example
+│   ├── requirements.txt
+│   └── app/
+│       ├── config.py
+│       ├── database.py
+│       ├── dependencies.py
+│       ├── main.py
+│       ├── models.py
+│       ├── routers/
+│       ├── schemas.py
+│       ├── security.py
+│       └── services/
+└── supabase/
 ```
 
----
+`supabase/` is kept as legacy reference material from the previous implementation. The active runtime now lives in `backend/`.
 
 ## Local Development
 
-```bash
-# from the repo root
-python -m http.server 5500
+Install Python 3.11+ first, then:
 
-# then open
-http://localhost:5500
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r backend/requirements.txt
+copy backend\.env.example backend\.env
+uvicorn backend.app.main:app --reload
 ```
 
-You should use a local HTTP server rather than opening the files directly, because Supabase auth flows and redirects behave more reliably over HTTP.
+Then open:
 
----
+```text
+http://127.0.0.1:8000
+```
 
-## Frontend Setup
+FastAPI serves the frontend pages and the `/api/*` routes from the same origin by default.
 
-Update `assets/js/config.js` before using the auth flow:
+## Configuration
+
+Frontend runtime configuration lives in `assets/js/config.js`.
 
 ```js
 window.NEXALPHA_CONFIG = Object.freeze({
-  supabaseUrl: "https://YOUR_PROJECT_ID.supabase.co",
-  supabaseAnonKey: "YOUR_SUPABASE_ANON_KEY",
-  // Optional. Leave blank to derive from supabaseUrl automatically.
-  functionsBaseUrl: "",
+  appBaseUrl: "",
+  apiBaseUrl: "",
   billing: {
     amountInr: 500,
     interval: "month"
@@ -134,98 +96,68 @@ window.NEXALPHA_CONFIG = Object.freeze({
 });
 ```
 
-The Supabase anon key is safe to expose in the browser. Do not put service role keys in this repository.
+Leave `appBaseUrl` and `apiBaseUrl` blank when FastAPI serves everything from the same origin. Set them only if the frontend and backend are deployed separately.
 
----
+Backend environment variables live in `backend/.env.example`. Important ones:
 
-## Supabase Setup
+- `SECRET_KEY`
+- `DATABASE_URL`
+- `BOOTSTRAP_ADMIN_EMAIL`
+- `BOOTSTRAP_ADMIN_PASSWORD`
+- `ENABLE_DEV_TOOLS`
+- `DEV_ADMIN_TOKEN`
+- `SMTP_*`
+- `RAZORPAY_KEY_ID`
+- `RAZORPAY_KEY_SECRET`
+- `RAZORPAY_PLAN_ID`
+- `RAZORPAY_WEBHOOK_SECRET`
 
-Run the SQL in:
+If SMTP is not configured, registration returns a verification preview link so the flow still works locally.
 
-- `supabase/migrations/20260402_auth_billing.sql`
+## FastAPI Endpoints
 
-This creates:
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/session`
+- `GET /verify-email`
+- `GET /api/account/status`
+- `POST /api/billing/create-subscription`
+- `GET /api/admin/users`
+- `POST /api/admin/approve-user`
+- `POST /api/dev/promote-admin`
+- `POST /api/webhooks/razorpay`
+- `GET /api/health`
 
-- `profiles`
-- `subscriptions`
-- `payments`
-- `audit_logs`
-- triggers for new-user profile creation
-- RLS policies for user-owned reads
-- `account_state_for_user(...)` RPC logic
+## Local Admin Promotion
 
-Required Supabase function secrets:
+If you need to promote an existing local account to admin without resetting the database:
 
-```text
-SUPABASE_URL
-SUPABASE_ANON_KEY
-SUPABASE_SERVICE_ROLE_KEY
-RAZORPAY_KEY_ID
-RAZORPAY_KEY_SECRET
-RAZORPAY_PLAN_ID
-RAZORPAY_WEBHOOK_SECRET
+1. Set these in `backend/.env`:
+
+```env
+ENABLE_DEV_TOOLS=true
+DEV_ADMIN_TOKEN=pick-a-long-random-string
 ```
 
-Deploy these functions:
+2. Restart FastAPI.
 
-- `me-status`
-- `create-subscription`
-- `admin-approve-user`
-- `razorpay-webhook`
+3. Run this from PowerShell:
 
----
+```powershell
+$headers = @{ "Content-Type" = "application/json"; "X-Dev-Admin-Token" = "pick-a-long-random-string" }
+$body = '{ "email": "your-user@example.com" }'
+Invoke-RestMethod -Method POST -Uri "http://127.0.0.1:8000/api/dev/promote-admin" -Headers $headers -Body $body
+```
 
-## What Each Page Does
+That marks the user as `admin`, sets approval to `approved`, and allows access to `admin.html`.
 
-- `index.html`: public marketing site and launch entrypoint
-- `register.html`: public signup page
-- `login.html`: sign-in page
-- `account.html`: shows approval, billing, and access state
-- `access.html`: checks entitlement before redirecting to a product app
-- `admin.html`: lightweight admin queue for approvals and billing review
+## Notes
 
----
-
-## What Each Function Does
-
-- `me-status`: returns the current effective access state for the signed-in user
-- `create-subscription`: creates a Razorpay subscription for approved users
-- `admin-list-users`: returns the current approval queue and subscription summary
-- `admin-approve-user`: approves or rejects pending users, but only after email verification
-- `razorpay-webhook`: verifies webhook signatures and syncs subscription/payment state into Supabase
-
----
-
-## Product URL Configuration
-
-App URLs are now configured in:
-
-- `assets/js/config.js`
-
-Update these values whenever OptiTrade or BharatAlpha move to a new endpoint.
-
----
-
-## Important Boundary
-
-This repo now handles the landing page, auth pages, and backend scaffolding.
-
-Direct product URLs are not fully protected until the Streamlit apps themselves enforce NexAlpha entitlement before rendering. That still needs to be added inside the OptiTrade and BharatAlpha codebases.
-
----
-
-## Deployment Notes
-
-The static pages can continue to deploy through GitHub Pages.
-
-The secure parts must be deployed separately:
-
-- database and auth in Supabase
-- edge functions in Supabase
-- product-app entitlement checks inside each Streamlit app
-
----
+- One `Rs 500/month` subscription unlocks both apps.
+- The admin approval rule still requires verified email before approval.
+- Direct Streamlit app URLs are not fully protected unless those apps also validate NexAlpha entitlement server-side.
 
 ## Disclaimer
 
-The content on this website is for informational purposes only and does not constitute financial advice. Trading in Futures and Options involves significant risk of loss. Users should conduct their own research and consult a SEBI-registered financial advisor before making investment decisions.
+This project is for informational purposes only and does not constitute financial advice. Trading in Futures and Options involves significant risk of loss.

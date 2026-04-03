@@ -74,4 +74,6 @@ async function init() {
     }
 }
 
-void init();
+void init().catch((error) => {
+    setMessage(message, "error", error.message);
+});

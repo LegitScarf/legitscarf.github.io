@@ -1,8 +1,7 @@
 window.NEXALPHA_CONFIG = Object.freeze({
-    supabaseUrl: "https://YOUR_PROJECT_ID.supabase.co",
-    supabaseAnonKey: "YOUR_SUPABASE_ANON_KEY",
-    // Optional: leave blank to derive from supabaseUrl automatically.
-    functionsBaseUrl: "",
+    // Optional: leave blank when FastAPI serves both the frontend and API on the same origin.
+    appBaseUrl: "",
+    apiBaseUrl: "",
     billing: {
         amountInr: 500,
         interval: "month"

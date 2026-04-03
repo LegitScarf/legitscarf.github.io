@@ -1,4 +1,4 @@
-import { bounceIfAuthenticated, clearMessage, getRedirectTarget, getSupabase, redirectTo, requireConfigured, setMessage } from "./auth-client.js";
+import { bounceIfAuthenticated, clearMessage, getQueryParam, getRedirectTarget, redirectTo, requireConfigured, setMessage, signIn } from "./auth-client.js";
 
 const form = document.querySelector("[data-login-form]");
 const message = document.querySelector("[data-form-message]");
@@ -10,6 +10,18 @@ async function init() {
 
     await bounceIfAuthenticated();
     requireConfigured(message);
+
+    if (getQueryParam("verified") === "1") {
+        setMessage(message, "success", "Your email has been verified. Sign in to continue.");
+        return;
+    }
+
+    const verificationState = getQueryParam("verification");
+    if (verificationState === "expired") {
+        setMessage(message, "warning", "Your verification link expired. Register again or request a new verification email.");
+    } else if (verificationState === "invalid") {
+        setMessage(message, "error", "That verification link is invalid.");
+    }
 }
 
 form?.addEventListener("submit", async (event) => {
@@ -29,27 +41,27 @@ form?.addEventListener("submit", async (event) => {
         return;
     }
 
-    const supabase = getSupabase();
     const button = form.querySelector("button[type='submit']");
     if (button) {
         button.disabled = true;
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-    });
+    try {
+        await signIn({
+            email,
+            password
+        });
 
-    if (button) {
-        button.disabled = false;
-    }
-
-    if (error) {
+        redirectTo(getRedirectTarget("account.html"));
+    } catch (error) {
         setMessage(message, "error", error.message);
-        return;
+    } finally {
+        if (button) {
+            button.disabled = false;
+        }
     }
-
-    redirectTo(getRedirectTarget("account.html"));
 });
 
-void init();
+void init().catch((error) => {
+    setMessage(message, "error", error.message);
+});
