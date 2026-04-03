@@ -17,6 +17,12 @@ load_dotenv(BACKEND_ROOT / ".env")
 
 
 def _default_database_url() -> str:
+    railway_volume_path = os.getenv("RAILWAY_VOLUME_MOUNT_PATH")
+    if railway_volume_path:
+        volume_db_path = Path(railway_volume_path) / "nexalpha.db"
+        volume_db_path.parent.mkdir(parents=True, exist_ok=True)
+        return f"sqlite:///{volume_db_path.as_posix()}"
+
     DATA_ROOT.mkdir(parents=True, exist_ok=True)
     return f"sqlite:///{DEFAULT_DB_PATH.as_posix()}"
 

@@ -68,6 +68,66 @@ http://127.0.0.1:8000
 
 FastAPI serves the frontend pages and the `/api/*` routes from the same origin by default.
 
+## Railway Deployment
+
+Railway is the better fit for the current app because this project is a stateful FastAPI server that serves both HTML and API routes and currently stores data in SQLite by default.
+
+This repo includes [railway.toml](c:/Users/KIIT/Desktop/NexAlpha/railway.toml) so Railway can start the app with:
+
+```text
+uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+```
+
+### Deploy Steps
+
+1. Push the repo to GitHub.
+2. In Railway, create a new project from the GitHub repo.
+3. Add a `Volume` and mount it at:
+
+```text
+/app/backend/data
+```
+
+4. Set these environment variables in Railway:
+
+```env
+APP_NAME=NexAlpha FastAPI
+APP_BASE_URL=https://your-railway-domain.up.railway.app
+API_BASE_URL=https://your-railway-domain.up.railway.app/api
+SECRET_KEY=replace-this-with-a-long-random-secret
+SESSION_COOKIE_NAME=nexalpha_session
+SESSION_TTL_MINUTES=10080
+SESSION_COOKIE_SECURE=true
+VERIFICATION_TOKEN_TTL_HOURS=48
+CORS_ORIGINS=https://your-railway-domain.up.railway.app
+BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+BOOTSTRAP_ADMIN_PASSWORD=change-me-now
+BOOTSTRAP_ADMIN_NAME=NexAlpha Admin
+SMTP_HOST=smtp-relay.brevo.com
+SMTP_PORT=587
+SMTP_USERNAME=your-brevo-login
+SMTP_PASSWORD=your-brevo-smtp-key
+SMTP_USE_TLS=true
+SMTP_FROM_EMAIL=your-verified-sender@example.com
+SMTP_FROM_NAME=NexAlpha
+RAZORPAY_KEY_ID=
+RAZORPAY_KEY_SECRET=
+RAZORPAY_PLAN_ID=
+RAZORPAY_WEBHOOK_SECRET=
+```
+
+5. Redeploy the service.
+6. Open the generated Railway domain and test:
+   - `/`
+   - `/register.html`
+   - `/login.html`
+   - `/api/health`
+
+### Notes
+
+- If `DATABASE_URL` is not set, the app now automatically uses `RAILWAY_VOLUME_MOUNT_PATH/nexalpha.db` when Railway provides a mounted volume path.
+- For a more production-grade setup later, move from SQLite to Postgres.
+
 ## Configuration
 
 Frontend runtime configuration lives in `assets/js/config.js`.
