@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..dependencies import get_current_user
-from ..models import ApprovalStatus, Subscription, SubscriptionStatus, User
+from ..models import AppRole, ApprovalStatus, Subscription, SubscriptionStatus, User
 from ..services.accounts import add_audit_log, build_status_payload, latest_subscription_for_user
 from ..services.razorpay import create_remote_subscription, normalize_subscription_status, unix_to_datetime
 
@@ -17,6 +17,12 @@ router = APIRouter(prefix="/api/billing", tags=["billing"])
 def create_subscription(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     subscription = latest_subscription_for_user(db, current_user.id)
     status_payload = build_status_payload(current_user, subscription)
+
+    if current_user.role == AppRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Admin accounts already have full access and do not require a subscription.",
+        )
 
     if current_user.approval_status != ApprovalStatus.APPROVED:
         raise HTTPException(

@@ -21,9 +21,12 @@ function renderActionLink(href, label, variant = "portal-button") {
 
 function renderSummary(status) {
     const config = getConfig();
+    const isAdmin = status.role === "admin";
     const currentEnd = status.subscription?.currentPeriodEnd
         ? new Date(status.subscription.currentPeriodEnd).toLocaleDateString()
-        : "Not scheduled";
+        : (isAdmin ? "Not required" : "Not scheduled");
+    const subscriptionLabel = isAdmin ? "not required" : (status.subscription?.status ?? "inactive");
+    const planLabel = isAdmin ? "Admin override" : `INR ${config.billing.amountInr}/${config.billing.interval}`;
 
     summary.innerHTML = `
         <div class="kv-card">
@@ -36,11 +39,11 @@ function renderSummary(status) {
         </div>
         <div class="kv-card">
             <span>Subscription</span>
-            <strong>${status.subscription?.status ?? "inactive"}</strong>
+            <strong>${subscriptionLabel}</strong>
         </div>
         <div class="kv-card">
             <span>Plan</span>
-            <strong>INR ${config.billing.amountInr}/${config.billing.interval}</strong>
+            <strong>${planLabel}</strong>
         </div>
         <div class="kv-card">
             <span>Renews / Ends</span>
@@ -50,6 +53,17 @@ function renderSummary(status) {
 }
 
 function renderState(status) {
+    if (status.role === "admin") {
+        accountState.className = "status-badge success";
+        accountState.textContent = "Admin Access";
+        setMessage(
+            accountMessage,
+            "success",
+            "Your admin account bypasses billing and can access the admin queue and both products immediately."
+        );
+        return;
+    }
+
     const stateMap = {
         guest: {
             tone: "warning",
@@ -96,6 +110,18 @@ function renderState(status) {
 
 function renderActions(status) {
     const products = Object.entries(getConfig().products ?? {});
+
+    if (status.role === "admin") {
+        const productLinks = products.map(([code, product], index) => {
+            const variant = index === 0 ? "portal-button" : "portal-button-secondary";
+            return renderActionLink(`access.html?product=${code}`, `Launch ${product.name}`, variant);
+        }).join("");
+        accountActions.innerHTML = `
+            ${renderActionLink("admin.html", "Open Admin Queue", "portal-button")}
+            ${productLinks}
+        `;
+        return;
+    }
 
     if (status.state === "active") {
         accountActions.innerHTML = products.map(([code, product], index) => {

@@ -44,7 +44,14 @@ def _is_active_subscription(subscription: Subscription | None) -> bool:
     return current_end > datetime.now(timezone.utc)
 
 
+def _is_admin(user: User) -> bool:
+    return user.role == AppRole.ADMIN
+
+
 def compute_account_state(user: User, subscription: Subscription | None) -> str:
+    if _is_admin(user):
+        return "active"
+
     if not user.is_email_verified:
         return "registered_unverified"
 
@@ -83,13 +90,16 @@ def compute_account_state(user: User, subscription: Subscription | None) -> str:
 
 
 def build_status_payload(user: User, subscription: Subscription | None = None) -> dict:
-    active = _is_active_subscription(subscription)
+    active = _is_admin(user) or _is_active_subscription(subscription)
     current_end = _normalize_datetime(subscription.current_period_end) if subscription else None
     return {
         "state": compute_account_state(user, subscription),
         "approvalStatus": user.approval_status.value,
         "role": user.role.value,
-        "canAccessApps": user.approval_status == ApprovalStatus.APPROVED and user.is_email_verified and active,
+        "isAdmin": _is_admin(user),
+        "canAccessApps": _is_admin(user) or (
+            user.approval_status == ApprovalStatus.APPROVED and user.is_email_verified and active
+        ),
         "email": user.email,
         "fullName": user.full_name,
         "subscription": {
@@ -115,4 +125,3 @@ def add_audit_log(
             details=details or {},
         )
     )
-

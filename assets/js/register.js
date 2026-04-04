@@ -50,8 +50,10 @@ form?.addEventListener("submit", async (event) => {
     }
 
     const button = form.querySelector("button[type='submit']");
+    const defaultButtonLabel = button?.textContent ?? "Create Account";
     if (button) {
         button.disabled = true;
+        button.textContent = "Creating...";
     }
 
     try {
@@ -62,7 +64,12 @@ form?.addEventListener("submit", async (event) => {
         });
 
         if (payload.emailDelivery === "preview" && payload.verificationUrl && helper) {
-            helper.innerHTML = `<a class="portal-button-secondary" href="${payload.verificationUrl}">Verify Email Now</a>`;
+            helper.innerHTML = `
+                <a class="portal-button" href="${payload.verificationUrl}">Verify Email Now</a>
+                <a class="portal-button-secondary" href="login.html">Go To Sign In</a>
+            `;
+        } else if (helper) {
+            helper.innerHTML = `<a class="portal-button-secondary" href="login.html">Go To Sign In</a>`;
         }
 
         setMessage(
@@ -83,6 +90,7 @@ form?.addEventListener("submit", async (event) => {
     } finally {
         if (button) {
             button.disabled = false;
+            button.textContent = defaultButtonLabel;
         }
     }
 });

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -36,8 +36,15 @@ def _utc(value):
     return value
 
 
+def _resolve_app_base_url(request: Request | None = None) -> str:
+    settings = get_settings()
+    if request:
+        return str(request.base_url).rstrip("/")
+    return settings.app_base_url
+
+
 @router.post("/register")
-def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+def register(payload: RegisterRequest, request: Request, db: Session = Depends(get_db)):
     email = payload.email.lower().strip()
     existing = db.query(User).filter(User.email == email).first()
     raw_token, token_hash_value = generate_verification_token()
@@ -79,7 +86,12 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
     db.commit()
 
-    delivery = send_verification_email(user.email, user.full_name, raw_token)
+    delivery = send_verification_email(
+        user.email,
+        user.full_name,
+        raw_token,
+        app_base_url=_resolve_app_base_url(request),
+    )
     return {
         "ok": True,
         "verificationRequired": True,
@@ -120,21 +132,21 @@ def session(user: User | None = Depends(get_current_user_optional)):
 
 
 @verification_router.get("/verify-email")
-def verify_email(token: str = Query(min_length=1), db: Session = Depends(get_db)):
-    settings = get_settings()
+def verify_email(request: Request, token: str = Query(min_length=1), db: Session = Depends(get_db)):
+    app_base_url = _resolve_app_base_url(request)
     token_hash_value = hash_token(token)
     user = db.query(User).filter(User.email_verification_token_hash == token_hash_value).first()
 
     if not user:
         return RedirectResponse(
-            url=f"{settings.app_base_url}/login.html?verification=invalid",
+            url=f"{app_base_url}/login.html?verification=invalid",
             status_code=status.HTTP_302_FOUND,
         )
 
     expires_at = _utc(user.email_verification_expires_at)
     if expires_at and expires_at < utcnow():
         return RedirectResponse(
-            url=f"{settings.app_base_url}/login.html?verification=expired",
+            url=f"{app_base_url}/login.html?verification=expired",
             status_code=status.HTTP_302_FOUND,
         )
 
@@ -145,4 +157,4 @@ def verify_email(token: str = Query(min_length=1), db: Session = Depends(get_db)
     add_audit_log(db, action="email_verified", target_user_id=user.id)
     db.commit()
 
-    return RedirectResponse(url=f"{settings.app_base_url}/login.html?verified=1", status_code=status.HTTP_302_FOUND)
+    return RedirectResponse(url=f"{app_base_url}/login.html?verified=1", status_code=status.HTTP_302_FOUND)

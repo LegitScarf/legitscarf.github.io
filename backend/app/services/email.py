@@ -6,9 +6,10 @@ from email.message import EmailMessage
 from ..config import get_settings
 
 
-def send_verification_email(email: str, full_name: str | None, token: str) -> dict:
+def send_verification_email(email: str, full_name: str | None, token: str, app_base_url: str | None = None) -> dict:
     settings = get_settings()
-    verification_url = f"{settings.app_base_url}/verify-email?token={token}"
+    public_base_url = (app_base_url or settings.app_base_url).rstrip("/")
+    verification_url = f"{public_base_url}/verify-email?token={token}"
 
     if not settings.smtp_host or not settings.smtp_from_email:
         return {
